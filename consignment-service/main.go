@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 	pb "github.com/micro-shippy/consignment-service/proto/consignment"
-	"google.golang.org/grpc"
+	vesselPb "github.com/micro-shippy/vessel-service/proto/vessel"
+	"github.com/micro/go-micro"
 	"log"
-	"net"
 )
 
 const (
@@ -34,48 +34,68 @@ func (repo *Repository) GetAll() []*pb.Consignment {
 	return repo.consignments
 }
 
-
 // 服务
 type service struct {
 	repo Repository
+	// consignment-service 作为客户端调用 vessel-service 的函数
+	vesselClient vesselPb.VesselServiceClient
 }
 
-// 实现 consignment.pb.go 中的 ShippingServiceServer 接口
+// 实现 consignment.pb.go 中的 ShippingServiceHandler 接口
 // 使 service 作为 gRPC 的服务端
 
 // 托运新的货物
-func (s *service) CreateConsignment(ctx context.Context, req *pb.Consignment) (*pb.Response, error) {
+func (s *service) CreateConsignment(ctx context.Context, req *pb.Consignment, res *pb.Response) (error) {
+
+	// 检查是否有适合的货轮
+	vReq := &vesselPb.Specification{
+		Capacity:  int32(len(req.Containers)),
+		MaxWeight: req.Weight,
+	}
+	vResp, err := s.vesselClient.FindAvailable(context.Background(), vReq)
+	if err != nil {
+		return err
+	}
+
+	// 货物被承运
+	log.Printf("found vessel: %s\n", vResp.Vessel.Name)
+	req.VesselId = vResp.Vessel.Id
+
 	// 接收承运的货物
 	consignment, err := s.repo.Create(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	resp := &pb.Response{Created: true, Consignment: consignment}
-	return resp, nil
+	res.Created = true
+	res.Consignment = consignment
+	return nil
 }
 
 // 获取目前所有托运的货物
-func (s *service) GetConsignments(ctx context.Context, req *pb.GetRequest) (*pb.Response, error) {
+func (s *service) GetConsignments(ctx context.Context, req *pb.GetRequest, res *pb.Response) error {
 	allConsignments := s.repo.GetAll()
-	resp := &pb.Response{Consignments: allConsignments}
-	return resp, nil
+	res.Consignments = allConsignments
+	return nil
 }
 
 func main() {
-	listener, err := net.Listen("tcp", PORT)
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
-	}
-	log.Printf("listen on: %s\n", PORT)
-
-	server := grpc.NewServer()
+	server := micro.NewService(
+		// 必须和 consignment.proto 中的 package 一致
+		micro.Name("go.micro.srv.consignment"),
+		micro.Version("latest"),
+	)
+	// 解析命令行参数
+	server.Init()
 	repo := Repository{}
+
+	// 作为 vessel-service 的客户端
+	vClient := vesselPb.NewVesselServiceClient("go.micro.srv.vessel", server.Client())
 
 	// 向 rRPC 服务器注册微服务
 	// 此时会把我们自己实现的微服务 service 与协议中的 ShippingServiceServer 绑定
-	pb.RegisterShippingServiceServer(server, &service{repo})
+	pb.RegisterShippingServiceHandler(server.Server(), &service{repo, vClient})
 
-	if err := server.Serve(listener); err != nil {
+	if err := server.Run(); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
 }

@@ -13,7 +13,7 @@ service ShippingService {
     }
 }
 
-// 货轮承运的的一批货物XX
+// 货轮承运的的一批货物
 message Consignment {
     string id = 1;                      // 货物编号
     string description = 2;             // 货物描述
