@@ -72,3 +72,10 @@ report.xml
 dist
 dist.tar
 .vscode
+
+# 二进制文件
+consignment-cli/consignment-cli
+consignment-service/consignment-service
+user-cli/user-cli
+user-service/user-service
+vessel-service/vessel-service

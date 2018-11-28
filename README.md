@@ -8,6 +8,10 @@
 ```bash
  go get -u github.com/micro/protobuf/proto
  go get -u github.com/micro/protobuf/protoc-gen-go
+ go get github.com/jinzhu/gorm
+ github.com/satori/go.uuid
+ go get github.com/labstack/gommon/log
+ go get github.com/lib/pq
  brew install protobuf
 ```
 ### 运行程序
